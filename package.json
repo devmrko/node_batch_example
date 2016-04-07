@@ -3,6 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
+    "start": "node batch_example.js",
+    "debug": "node --debug batch_example.js"
   },
   "dependencies": {
     "monk": "^1.0.1",
