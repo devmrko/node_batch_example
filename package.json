@@ -3,10 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "start": "node batch_example.js",
-    "debug": "node --debug batch_example.js"
+    "start": "node batch_mongoDB.js",
+    "debug": "node --debug batch_mongoDB.js"
   },
   "dependencies": {
+    "debug": "~2.2.0",      
     "monk": "^1.0.1",
     "node-schedule": "^1.1.0",
     "nodemailer": "X"
