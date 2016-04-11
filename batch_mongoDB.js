@@ -3,7 +3,8 @@ var schedule = require('node-schedule');
 var async = require('async');
 var nodemailer = require('nodemailer');
 var db;
-db = require('monk')('');
+var config = require('./config.json');
+db = require('monk')(config.db_connection_url);
 
 //var rule = '*/5 * * * * *';// every 5 seconds
 // var rule = '*/1 * * * *';// every 1 min
@@ -43,8 +44,8 @@ processBatch.prototype.doBatch = function () {
             var transporter = nodemailer.createTransport({
                 service: 'Gmail',
                 auth: {
-                    user: 'devmrko@gmail.com',
-                    pass: ''
+                    user: config.email_id,
+                    pass: config.email_password
                 }
             });
 
