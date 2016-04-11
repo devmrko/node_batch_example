@@ -3,6 +3,7 @@ var schedule = require('node-schedule');
 var async = require('async');
 var nodemailer = require('nodemailer');
 var db;
+db = require('monk')('');
 
 //var rule = '*/5 * * * * *';// every 5 seconds
 // var rule = '*/1 * * * *';// every 1 min
@@ -22,13 +23,13 @@ function convertDateFormat(date) {
 }
 
 function processBatch() {
+    console.log("run processBatch");
     var self = this;
-    db = require('monk')('');
     self.doBatch();
 }
 
 processBatch.prototype.doBatch = function () {
-    // console.log("run doBatch");
+    console.log("run doBatch");
     var self = this;
     async.parallel([
         // get user list
@@ -84,7 +85,7 @@ processBatch.prototype.dataHandling = function (userId, callback) {
             // console.log("2nd waterfall async process");
             // console.log("parameters check: " + retrieveParam + ", " + retrieveParam2);
             var chklstDb = db.get('checklist');
-            chklstDb.find({ notice_bool: 'true' }, { sort: { done_bool: 1, due_date: -1 }, limit: 3 },
+            chklstDb.find({ notice_bool: true, complete: "n"}, { sort: { done_bool: 1, due_date: -1 }},
                 function (err, result) {
                     callback(null, result);
                 }
@@ -98,7 +99,8 @@ processBatch.prototype.dataHandling = function (userId, callback) {
                 function (retrieveResult, callback) {
                     rowObj = {};
                     rowObj.parents = retrieveResult;
-                    chklstDtlDb.find({ chklst_id: retrieveResult._id, done_bool: false, due_date: convertDateFormat(new Date()) }, {},
+                    // , due_date: {"$lte": convertDateFormat(new Date()) }
+                    chklstDtlDb.find({ chklst_id: retrieveResult._id, done_bool: false}, {},
                         function (err, result) {
                             rowObj.child = result;
                             resultArry[resultArry.length] = rowObj;
@@ -109,20 +111,37 @@ processBatch.prototype.dataHandling = function (userId, callback) {
                     // console.log("end of series processes");
                     callback(null, resultArry);
                 });
+        }, function (chklstContents, callback) {
+                  // console.log("3rd waterfall async process");
+            var memoDb = db.get('memo');
+            // , due_date: {"$lte": convertDateFormat(new Date()) }
+            memoDb.find({ complete: "n", tags: "todo" }, {},
+                function (err, result) {
+                    callback(null, chklstContents, result);
+                }
+            );
 
-
-        }], function (err, results) {
+        }], function (err, chklstContents, todoContents) {
             // console.log("end of waterfall process, result is " + results);
-            var contents = '<p>You have these checklist to do today.</p>';
-            for (var i = 0; i < results.length; i++) {
-                contents += '<ul><li>Title: ' + results[i].parents.title + "</li>";
+            var contents = '<p>You have these checklists to do today.</p>';
+            for (var i = 0; i < chklstContents.length; i++) {
+                contents += '<ul><li>Title: ' + chklstContents[i].parents.title + "</li>";
 
-                for (var j = 0; j < results[i].child.length; j++) {
-                    contents += "<li>Due date: " + results[i].child[j].due_date + "</li>";
+                for (var j = 0; j < chklstContents[i].child.length; j++) {
+                    contents += "<li>Due date: " + chklstContents[i].child[j].due_date + "</li>";
                 }
                 contents += '</ul>';
             }
+
+            contents += '<p>You have these todo lists today.</p>';
+            for (var i = 0; i < todoContents.length; i++) {
+                contents += '<ul>';
+                contents += '<li>Contents: ' + todoContents[i].contents + "</li>";
+                contents += '<li>Due date: ' + todoContents[i].due_date + "</li>";
+                contents += '</ul>';
+            }
             // console.dir(contents);
+
             callback(contents);
         });
 }
@@ -131,4 +150,6 @@ var j = schedule.scheduleJob(rule, function () {
     console.log("run scheduler");
     new processBatch();
 });
-
+/*
+new processBatch();
+*/
