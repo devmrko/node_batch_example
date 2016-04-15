@@ -1,18 +1,10 @@
 
-var schedule = require('node-schedule');
 var async = require('async');
+var CronJob = require('cron').CronJob;
 var nodemailer = require('nodemailer');
 var db;
 var config = require('./config.json');
 db = require('monk')(config.db_connection_url);
-
-//var rule = '*/5 * * * * *';// every 5 seconds
-// var rule = '*/1 * * * *';// every 1 min
-
-var rule = new schedule.RecurrenceRule();
-rule.dayOfWeek = [0, new schedule.Range(0, 6)];// day of week(mon - sun)
-rule.hour = 6;
-rule.minute = 30;
 
 function zeroPad(num, places) {
     var zero = places - num.toString().length + 1;
@@ -20,7 +12,9 @@ function zeroPad(num, places) {
 }
 
 function convertDateFormat(date) {
-    return zeroPad(date.getMonth() + 1, 2) + '/' + zeroPad(date.getDate(), 2) + '/' + date.getFullYear()
+    //return zeroPad(date.getMonth() + 1, 2) + '/' + zeroPad(date.getDate(), 2) + '/' + date.getFullYear()
+    return date.getFullYear() + '-' + zeroPad(date.getMonth() + 1, 2) + '-' + zeroPad(date.getDate(), 2);
+
 }
 
 function processBatch() {
@@ -63,7 +57,7 @@ processBatch.prototype.doBatch = function () {
                     console.log('Message Sent: ' + info.response);
                 }
             });
-
+            // callback(null);
             // console.log("end of series processes");
         });
     });
@@ -80,17 +74,29 @@ processBatch.prototype.dataHandling = function (userId, callback) {
             // console.log("1st waterfall async process");
             var retrieveParam = 'first process';
             var retrieveParam2 = 'second process';
-            callback(null, retrieveParam, retrieveParam2);
+
+            var chklstDtlDb = db.get('checklistDtl');
+            chklstDtlDb.distinct('chklst_id', {'due_date': {'$lte': convertDateFormat(new Date())}, 'done_bool': false }, function (err, chklst_ids) {
+                //callback(null, categories.sort());
+                callback(null, retrieveParam, retrieveParam2, chklst_ids);
+            });
         },
-        function (retrieveParam, retrieveParam2, callback) {
+        function (retrieveParam, retrieveParam2, chklst_ids, callback) {
             // console.log("2nd waterfall async process");
             // console.log("parameters check: " + retrieveParam + ", " + retrieveParam2);
+
             var chklstDb = db.get('checklist');
-            chklstDb.find({ notice_bool: true, complete: "n"}, { sort: { done_bool: 1, due_date: -1 }},
+            chklstDb.find({
+                      notice_bool: true,
+                      complete: "n",
+                      _id: {'$in': chklst_ids}
+                    },
+                    { sort: { done_bool: 1, due_date: -1 }
+                },
                 function (err, result) {
                     callback(null, result);
                 }
-                );
+            );
 
         }, function (retrieveResult, callback) {
             // console.log("3rd waterfall async process");
@@ -116,7 +122,7 @@ processBatch.prototype.dataHandling = function (userId, callback) {
                   // console.log("3rd waterfall async process");
             var memoDb = db.get('memo');
             // , due_date: {"$lte": convertDateFormat(new Date()) }
-            memoDb.find({ complete: "n", tags: "todo" }, {},
+            memoDb.find({ complete: "n", tags: "todo", notice_bool: true }, {},
                 function (err, result) {
                     callback(null, chklstContents, result);
                 }
@@ -147,10 +153,15 @@ processBatch.prototype.dataHandling = function (userId, callback) {
         });
 }
 
-var j = schedule.scheduleJob(rule, function () {
-    console.log("run scheduler");
-    new processBatch();
-});
-/*
-new processBatch();
-*/
+new CronJob(
+    // '00 06 11 * * *',
+    '00 18 11 * * *',
+    function() {
+        console.log('started');
+        new processBatch();
+    }, function() {
+        console.log('stopped');
+    },
+    true,
+    ''
+);
